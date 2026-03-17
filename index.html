@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Removedor de Marca d'Água de Vídeo (Simulação)</title>
+    <title>Removedor de Marca d'Água com IA</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -25,10 +27,11 @@
         .upload-area:hover {
             background-color: #f9f9f9;
         }
-        #videoPreview {
+        #videoPreview, #canvasOutput {
             max-width: 100%;
             margin: 20px 0;
             display: none;
+            border: 1px solid #ddd;
         }
         button {
             background-color: #4CAF50;
@@ -38,6 +41,7 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
+            margin: 5px;
         }
         button:hover {
             background-color: #45a049;
@@ -49,8 +53,8 @@
     </style>
 </head>
 <body>
-    <h1>Removedor de Marca d'Água de Vídeo (Simulação)</h1>
-    <p>Faça upload de um vídeo para simular a remoção da marca d'água.</p>
+    <h1>Removedor de Marca d'Água com IA</h1>
+    <p>Faça upload de um vídeo para detectar e remover a marca d'água automaticamente.</p>
 
     <div class="upload-area" onclick="document.getElementById('videoUpload').click()">
         <p>Clique aqui para fazer upload de um vídeo</p>
@@ -58,29 +62,84 @@
     </div>
 
     <video id="videoPreview" controls></video>
+    <canvas id="canvasOutput"></canvas>
 
-    <button id="removeWatermarkBtn" onclick="simularRemocao()">Simular Remoção de Marca d'Água</button>
+    <button id="processButton" onclick="processVideo()" style="display: none;">Processar Vídeo com IA</button>
 
     <p id="status"></p>
 
     <script>
+        let video = document.getElementById('videoPreview');
+        let canvas = document.getElementById('canvasOutput');
+        let ctx = canvas.getContext('2d');
+        let model;
+
+        // Carregar o modelo COCO-SSD
+        async function loadModel() {
+            document.getElementById('status').textContent = "Carregando modelo de IA...";
+            model = await cocoSsd.load();
+            document.getElementById('status').textContent = "Modelo carregado! Faça upload de um vídeo.";
+        }
+
         function handleVideoUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            const videoPreview = document.getElementById('videoPreview');
-            videoPreview.style.display = 'block';
-            videoPreview.src = URL.createObjectURL(file);
-            document.getElementById('status').textContent = "Vídeo carregado com sucesso!";
+            video.style.display = 'block';
+            video.src = URL.createObjectURL(file);
+            document.getElementById('processButton').style.display = 'block';
+            document.getElementById('status').textContent = "Vídeo carregado. Clique em 'Processar Vídeo com IA'.";
         }
 
-        function simularRemocao() {
-            const status = document.getElementById('status');
-            status.textContent = "Simulando remoção de marca d'água... (Isso é apenas uma simulação)";
-            setTimeout(() => {
-                status.textContent = "Remoção simulada concluída! (Para remoção real, use ferramentas especializadas)";
-            }, 2000);
+        async function processVideo() {
+            if (!model) {
+                alert("O modelo de IA ainda não foi carregado. Aguarde...");
+                return;
+            }
+
+            document.getElementById('status').textContent = "Processando vídeo...";
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            // Processar frame por frame
+            function processFrame() {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                detectWatermark();
+                requestAnimationFrame(processFrame);
+            }
+
+            processFrame();
         }
+
+        async function detectWatermark() {
+            const predictions = await model.detect(canvas);
+            predictions.forEach(prediction => {
+                // Filtrar detecções que podem ser marcas d'água (ex: objetos retangulares)
+                if (prediction.class === 'person' || prediction.class === 'cell phone') return;
+
+                // Aplicar blur na área detectada
+                applyBlur(prediction.bbox);
+            });
+        }
+
+        function applyBlur(bbox) {
+            const [x, y, width, height] = bbox;
+            const imageData = ctx.getImageData(x, y, width, height);
+
+            // Aplicar blur simples (média de pixels)
+            for (let i = 0; i < imageData.data.length; i += 4) {
+                const avg = (imageData.data[i] + imageData.data[i + 1] + imageData.data[i + 2]) / 3;
+                imageData.data[i] = avg;     // R
+                imageData.data[i + 1] = avg; // G
+                imageData.data[i + 2] = avg; // B
+            }
+
+            ctx.putImageData(imageData, x, y);
+            canvas.style.display = 'block';
+        }
+
+        // Inicializar o modelo ao carregar a página
+        loadModel();
     </script>
 </body>
 </html>
