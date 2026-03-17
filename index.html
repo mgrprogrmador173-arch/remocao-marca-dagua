@@ -64,11 +64,19 @@
             line-height: 20px;
             color: white;
         }
+        .blur-options {
+            margin: 10px 0;
+            display: none;
+        }
+        .selection-tools {
+            margin: 10px 0;
+            display: none;
+        }
     </style>
 </head>
 <body>
     <h1>Removedor de Marca d'Água com IA</h1>
-    <p>Faça upload de um vídeo para detectar e remover a marca d'água automaticamente.</p>
+    <p>Faça upload de um vídeo para detectar e remover a marca d'água automaticamente ou manualmente.</p>
 
     <div class="upload-area" onclick="document.getElementById('videoUpload').click()">
         <p>Clique aqui para fazer upload de um vídeo</p>
@@ -80,6 +88,19 @@
 
     <div id="progressBar">
         <div id="progress">0%</div>
+    </div>
+
+    <div class="blur-options" id="blurOptions">
+        <label for="blurLevel">Nível de Blur:</label>
+        <select id="blurLevel">
+            <option value="1">Suave</option>
+            <option value="3" selected>Médio</option>
+            <option value="5">Forte</option>
+        </select>
+    </div>
+
+    <div class="selection-tools" id="selectionTools">
+        <button onclick="startManualSelection()">Selecionar Área Manualmente</button>
     </div>
 
     <button id="processButton" onclick="processVideo()" style="display: none;">Processar Vídeo com IA</button>
@@ -96,6 +117,9 @@
         let totalFrames = 0;
         let recordedChunks = [];
         let mediaRecorder;
+        let isSelecting = false;
+        let startX, startY;
+        let selection = { x: 0, y: 0, width: 0, height: 0 };
 
         // Carregar o modelo COCO-SSD
         async function loadModel() {
@@ -111,12 +135,34 @@
             video.style.display = 'block';
             video.src = URL.createObjectURL(file);
             document.getElementById('processButton').style.display = 'block';
-            document.getElementById('status').textContent = "Vídeo carregado. Clique em 'Processar Vídeo com IA'.";
+            document.getElementById('blurOptions').style.display = 'block';
+            document.getElementById('selectionTools').style.display = 'block';
+            document.getElementById('status').textContent = "Vídeo carregado. Escolha uma opção de processamento.";
+        }
+
+        function startManualSelection() {
+            document.getElementById('status').textContent = "Clique e arraste no vídeo para selecionar a área da marca d'água.";
+            video.onmousedown = function(e) {
+                isSelecting = true;
+                startX = e.offsetX;
+                startY = e.offsetY;
+                video.onmousemove = function(e) {
+                    if (!isSelecting) return;
+                    const width = e.offsetX - startX;
+                    const height = e.offsetY - startY;
+                    selection = { x: startX, y: startY, width, height };
+                };
+                video.onmouseup = function() {
+                    isSelecting = false;
+                    video.onmousemove = null;
+                    document.getElementById('status').textContent = `Área selecionada: (${selection.x}, ${selection.y}) a (${selection.width}, ${selection.height}). Clique em 'Processar Vídeo com IA'.`;
+                };
+            };
         }
 
         async function processVideo() {
-            if (!model) {
-                alert("O modelo de IA ainda não foi carregado. Aguarde...");
+            if (!model && !selection.width) {
+                alert("Por favor, selecione uma área manualmente ou aguarde o modelo de IA carregar.");
                 return;
             }
 
@@ -145,7 +191,12 @@
                 }
 
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                detectWatermark();
+
+                if (selection.width > 0) {
+                    applyBlur(selection.x, selection.y, selection.width, selection.height);
+                } else {
+                    detectWatermark();
+                }
 
                 framesProcessed++;
                 const progressPercentage = Math.min(100, (framesProcessed / totalFrames) * 100);
@@ -161,6 +212,7 @@
             });
 
             video.play();
+            document.getElementById('downloadButton').style.display = 'block';
         }
 
         async function detectWatermark() {
@@ -170,20 +222,20 @@
                 if (prediction.class === 'person' || prediction.class === 'cell phone') return;
 
                 // Aplicar blur na área detectada
-                applyBlur(prediction.bbox);
+                applyBlur(prediction.bbox[0], prediction.bbox[1], prediction.bbox[2], prediction.bbox[3]);
             });
         }
 
-        function applyBlur(bbox) {
-            const [x, y, width, height] = bbox;
+        function applyBlur(x, y, width, height) {
+            const blurLevel = parseInt(document.getElementById('blurLevel').value);
             const imageData = ctx.getImageData(x, y, width, height);
 
-            // Aplicar blur simples (média de pixels)
+            // Aplicar blur com base no nível selecionado
             for (let i = 0; i < imageData.data.length; i += 4) {
                 const avg = (imageData.data[i] + imageData.data[i + 1] + imageData.data[i + 2]) / 3;
-                imageData.data[i] = avg;     // R
-                imageData.data[i + 1] = avg; // G
-                imageData.data[i + 2] = avg; // B
+                imageData.data[i] = avg / blurLevel * 3;     // R
+                imageData.data[i + 1] = avg / blurLevel * 3; // G
+                imageData.data[i + 2] = avg / blurLevel * 3; // B
             }
 
             ctx.putImageData(imageData, x, y);
