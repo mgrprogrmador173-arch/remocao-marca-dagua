@@ -113,8 +113,8 @@
         <button onclick="startManualSelection()">Selecionar Área Manualmente</button>
     </div>
 
-    <button id="processButton" onclick="processVideo()" style="display: none;">Processar Vídeo com IA</button>
-    <button id="downloadButton" onclick="downloadVideo()" style="display: none;">Baixar Vídeo Processado</button>
+    <button id="processButton" onclick="processCurrentFrame()" style="display: none;">Processar Frame Atual</button>
+    <button id="downloadButton" onclick="downloadProcessedFrame()" style="display: none;">Baixar Frame Processado</button>
 
     <p id="status"></p>
 
@@ -127,7 +127,6 @@
         let startX, startY;
         let selectionBox = document.getElementById('selectionBox');
         let selection = { x: 0, y: 0, width: 0, height: 0 };
-        let isProcessing = false;
 
         // Marcas d'água comuns para detecção
         const commonWatermarks = [
@@ -205,35 +204,30 @@
             video.onmouseup = function() {
                 if (isSelecting) {
                     isSelecting = false;
-                    document.getElementById('status').textContent = `Área selecionada: (${selection.x}, ${selection.y}) a (${selection.width}, ${selection.height}). Clique em 'Processar Vídeo com IA'.`;
+                    document.getElementById('status').textContent = `Área selecionada: (${selection.x}, ${selection.y}) a (${selection.width}, ${selection.height}). Clique em 'Processar Frame Atual'.`;
                 }
             };
         }
 
-        async function processVideo() {
-            if (isProcessing) return;
-            isProcessing = true;
+        async function processCurrentFrame() {
+            if (!video.paused) {
+                video.pause();
+            }
 
-            document.getElementById('status').textContent = "Processando vídeo...";
-            document.getElementById('progressBar').style.display = 'block';
+            document.getElementById('status').textContent = "Processando frame atual...";
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-
-            // Processar o vídeo frame a frame
-            video.pause();
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             if (selection.width > 0) {
                 applyBlur(selection.x, selection.y, selection.width, selection.height);
-            } else {
+            } else if (model) {
                 await detectWatermark();
             }
 
-            document.getElementById('progress').style.width = '100%';
-            document.getElementById('progress').textContent = '100%';
+            canvas.style.display = 'block';
             document.getElementById('downloadButton').style.display = 'block';
-            document.getElementById('status').textContent = "Processamento concluído! Clique em 'Baixar Vídeo Processado'.";
-            isProcessing = false;
+            document.getElementById('status').textContent = "Frame processado! Clique em 'Baixar Frame Processado'.";
         }
 
         async function detectWatermark() {
@@ -258,19 +252,17 @@
             // Aplicar blur com base no nível selecionado
             for (let i = 0; i < imageData.data.length; i += 4) {
                 const avg = (imageData.data[i] + imageData.data[i + 1] + imageData.data[i + 2]) / 3;
-                imageData.data[i] = avg;     // R
-                imageData.data[i + 1] = avg; // G
-                imageData.data[i + 2] = avg; // B
+                imageData.data[i] = avg / blurLevel * 3;     // R
+                imageData.data[i + 1] = avg / blurLevel * 3; // G
+                imageData.data[i + 2] = avg / blurLevel * 3; // B
             }
 
             ctx.putImageData(imageData, x, y);
-            canvas.style.display = 'block';
         }
 
-        function downloadVideo() {
-            // Criar um link para download do canvas como imagem (para demonstração)
+        function downloadProcessedFrame() {
             const link = document.createElement('a');
-            link.download = 'video_processado.png';
+            link.download = 'frame_processado.png';
             link.href = canvas.toDataURL('image/png');
             link.click();
             document.getElementById('status').textContent = "Frame processado baixado com sucesso!";
