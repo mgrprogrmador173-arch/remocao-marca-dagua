@@ -127,7 +127,6 @@
         let startX, startY;
         let selectionBox = document.getElementById('selectionBox');
         let selection = { x: 0, y: 0, width: 0, height: 0 };
-        let processedFrames = [];
         let isProcessing = false;
 
         // Marcas d'água comuns para detecção
@@ -220,7 +219,8 @@
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
 
-            // Processar apenas o frame atual (para demonstração)
+            // Processar o vídeo frame a frame
+            video.pause();
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             if (selection.width > 0) {
@@ -258,9 +258,9 @@
             // Aplicar blur com base no nível selecionado
             for (let i = 0; i < imageData.data.length; i += 4) {
                 const avg = (imageData.data[i] + imageData.data[i + 1] + imageData.data[i + 2]) / 3;
-                imageData.data[i] = avg / blurLevel * 3;     // R
-                imageData.data[i + 1] = avg / blurLevel * 3; // G
-                imageData.data[i + 2] = avg / blurLevel * 3; // B
+                imageData.data[i] = avg;     // R
+                imageData.data[i + 1] = avg; // G
+                imageData.data[i + 2] = avg; // B
             }
 
             ctx.putImageData(imageData, x, y);
@@ -273,7 +273,7 @@
             link.download = 'video_processado.png';
             link.href = canvas.toDataURL('image/png');
             link.click();
-            document.getElementById('status').textContent = "Imagem do frame processado baixada com sucesso!";
+            document.getElementById('status').textContent = "Frame processado baixado com sucesso!";
         }
 
         // Inicializar o modelo ao carregar a página
