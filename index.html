@@ -113,8 +113,8 @@
         <button onclick="startManualSelection()">Selecionar Área Manualmente</button>
     </div>
 
-    <button id="processButton" onclick="processCurrentFrame()" style="display: none;">Processar Frame Atual</button>
-    <button id="downloadButton" onclick="downloadProcessedFrame()" style="display: none;">Baixar Frame Processado</button>
+    <button id="processButton" onclick="processVideo()" style="display: none;">Processar Vídeo com IA</button>
+    <button id="downloadButton" onclick="downloadVideo()" style="display: none;">Baixar Vídeo Processado</button>
 
     <p id="status"></p>
 
@@ -127,6 +127,9 @@
         let startX, startY;
         let selectionBox = document.getElementById('selectionBox');
         let selection = { x: 0, y: 0, width: 0, height: 0 };
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isProcessing = false;
 
         // Marcas d'água comuns para detecção
         const commonWatermarks = [
@@ -204,33 +207,62 @@
             video.onmouseup = function() {
                 if (isSelecting) {
                     isSelecting = false;
-                    document.getElementById('status').textContent = `Área selecionada: (${selection.x}, ${selection.y}) a (${selection.width}, ${selection.height}). Clique em 'Processar Frame Atual'.`;
+                    document.getElementById('status').textContent = `Área selecionada: (${selection.x}, ${selection.y}) a (${selection.width}, ${selection.height}). Clique em 'Processar Vídeo com IA'.`;
                 }
             };
         }
 
-        async function processCurrentFrame() {
-            if (!video.paused) {
-                video.pause();
-            }
+        async function processVideo() {
+            if (isProcessing) return;
+            isProcessing = true;
 
-            document.getElementById('status').textContent = "Processando frame atual...";
+            document.getElementById('status').textContent = "Processando vídeo...";
+            document.getElementById('progressBar').style.display = 'block';
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            if (selection.width > 0) {
-                applyBlur(selection.x, selection.y, selection.width, selection.height);
-            } else if (model) {
-                await detectWatermark();
+            // Iniciar gravação do canvas
+            recordedChunks = [];
+            const stream = canvas.captureStream(30); // 30 FPS
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.start(100); // Coleta dados a cada 100ms
+
+            // Processar frame a frame
+            function processFrame() {
+                if (video.paused || video.ended) {
+                    return;
+                }
+
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                if (selection.width > 0) {
+                    applyBlur(selection.x, selection.y, selection.width, selection.height);
+                } else {
+                    detectWatermark();
+                }
+
+                requestAnimationFrame(processFrame);
             }
 
-            canvas.style.display = 'block';
+            video.addEventListener('play', () => {
+                processFrame();
+            });
+
+            video.play();
             document.getElementById('downloadButton').style.display = 'block';
-            document.getElementById('status').textContent = "Frame processado! Clique em 'Baixar Frame Processado'.";
+            isProcessing = false;
         }
 
         async function detectWatermark() {
+            if (!model) return;
+
             const predictions = await model.detect(canvas);
             predictions.forEach(prediction => {
                 // Verificar se a detecção corresponde a marcas d'água comuns
@@ -252,20 +284,26 @@
             // Aplicar blur com base no nível selecionado
             for (let i = 0; i < imageData.data.length; i += 4) {
                 const avg = (imageData.data[i] + imageData.data[i + 1] + imageData.data[i + 2]) / 3;
-                imageData.data[i] = avg / blurLevel * 3;     // R
-                imageData.data[i + 1] = avg / blurLevel * 3; // G
-                imageData.data[i + 2] = avg / blurLevel * 3; // B
+                imageData.data[i] = avg;     // R
+                imageData.data[i + 1] = avg; // G
+                imageData.data[i + 2] = avg; // B
             }
 
             ctx.putImageData(imageData, x, y);
+            canvas.style.display = 'block';
         }
 
-        function downloadProcessedFrame() {
-            const link = document.createElement('a');
-            link.download = 'frame_processado.png';
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-            document.getElementById('status').textContent = "Frame processado baixado com sucesso!";
+        function downloadVideo() {
+            mediaRecorder.stop();
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'video_processado.webm';
+                a.click();
+                document.getElementById('status').textContent = "Vídeo processado baixado com sucesso!";
+            };
         }
 
         // Inicializar o modelo ao carregar a página
