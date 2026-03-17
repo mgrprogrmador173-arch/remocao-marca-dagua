@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Removedor de Marca d'Água de Vídeo (Simulação)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            background-color: #f9f9f9;
+        }
+        #videoPreview {
+            max-width: 100%;
+            margin: 20px 0;
+            display: none;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #status {
+            margin: 20px 0;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Removedor de Marca d'Água de Vídeo (Simulação)</h1>
+    <p>Faça upload de um vídeo para simular a remoção da marca d'água.</p>
+
+    <div class="upload-area" onclick="document.getElementById('videoUpload').click()">
+        <p>Clique aqui para fazer upload de um vídeo</p>
+        <input type="file" id="videoUpload" accept="video/*" style="display: none;" onchange="handleVideoUpload(event)">
+    </div>
+
+    <video id="videoPreview" controls></video>
+
+    <button id="removeWatermarkBtn" onclick="simularRemocao()">Simular Remoção de Marca d'Água</button>
+
+    <p id="status"></p>
+
+    <script>
+        function handleVideoUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const videoPreview = document.getElementById('videoPreview');
+            videoPreview.style.display = 'block';
+            videoPreview.src = URL.createObjectURL(file);
+            document.getElementById('status').textContent = "Vídeo carregado com sucesso!";
+        }
+
+        function simularRemocao() {
+            const status = document.getElementById('status');
+            status.textContent = "Simulando remoção de marca d'água... (Isso é apenas uma simulação)";
+            setTimeout(() => {
+                status.textContent = "Remoção simulada concluída! (Para remoção real, use ferramentas especializadas)";
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
