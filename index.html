@@ -72,18 +72,28 @@
             margin: 10px 0;
             display: none;
         }
+        #selectionBox {
+            position: absolute;
+            border: 2px dashed #FF0000;
+            background-color: rgba(255, 0, 0, 0.1);
+            display: none;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
     <h1>Removedor de Marca d'Água com IA</h1>
-    <p>Faça upload de um vídeo para detectar e remover a marca d'água automaticamente ou manualmente.</p>
+    <p>Faça upload de um vídeo para detectar e remover marcas d'água (TikTok, CapCut, InShot, etc.) automaticamente ou manualmente.</p>
 
     <div class="upload-area" onclick="document.getElementById('videoUpload').click()">
         <p>Clique aqui para fazer upload de um vídeo</p>
         <input type="file" id="videoUpload" accept="video/*" style="display: none;" onchange="handleVideoUpload(event)">
     </div>
 
-    <video id="videoPreview" controls></video>
+    <div id="videoContainer" style="position: relative;">
+        <video id="videoPreview" controls></video>
+        <div id="selectionBox"></div>
+    </div>
     <canvas id="canvasOutput"></canvas>
 
     <div id="progressBar">
@@ -119,7 +129,16 @@
         let mediaRecorder;
         let isSelecting = false;
         let startX, startY;
+        let selectionBox = document.getElementById('selectionBox');
         let selection = { x: 0, y: 0, width: 0, height: 0 };
+
+        // Marcas d'água comuns para detecção
+        const commonWatermarks = [
+            { name: "TikTok", keywords: ["tiktok", "@tiktok"] },
+            { name: "CapCut", keywords: ["capcut", "@capcut"] },
+            { name: "InShot", keywords: ["inshot", "@inshot"] },
+            { name: "Alight Motion", keywords: ["alight motion", "@alightmotion"] }
+        ];
 
         // Carregar o modelo COCO-SSD
         async function loadModel() {
@@ -142,26 +161,60 @@
 
         function startManualSelection() {
             document.getElementById('status').textContent = "Clique e arraste no vídeo para selecionar a área da marca d'água.";
+            isSelecting = false;
+
             video.onmousedown = function(e) {
+                const rect = video.getBoundingClientRect();
+                startX = e.clientX - rect.left;
+                startY = e.clientY - rect.top;
                 isSelecting = true;
-                startX = e.offsetX;
-                startY = e.offsetY;
-                video.onmousemove = function(e) {
-                    if (!isSelecting) return;
-                    const width = e.offsetX - startX;
-                    const height = e.offsetY - startY;
-                    selection = { x: startX, y: startY, width, height };
+
+                selectionBox.style.left = `${rect.left + startX}px`;
+                selectionBox.style.top = `${rect.top + startY}px`;
+                selectionBox.style.width = '0px';
+                selectionBox.style.height = '0px';
+                selectionBox.style.display = 'block';
+            };
+
+            video.onmousemove = function(e) {
+                if (!isSelecting) return;
+
+                const rect = video.getBoundingClientRect();
+                const currentX = e.clientX - rect.left;
+                const currentY = e.clientY - rect.top;
+
+                const width = currentX - startX;
+                const height = currentY - startY;
+
+                selectionBox.style.width = `${Math.abs(width)}px`;
+                selectionBox.style.height = `${Math.abs(height)}px`;
+
+                if (width < 0) {
+                    selectionBox.style.left = `${rect.left + currentX}px`;
+                }
+
+                if (height < 0) {
+                    selectionBox.style.top = `${rect.top + currentY}px`;
+                }
+
+                selection = {
+                    x: width < 0 ? currentX : startX,
+                    y: height < 0 ? currentY : startY,
+                    width: Math.abs(width),
+                    height: Math.abs(height)
                 };
-                video.onmouseup = function() {
+            };
+
+            video.onmouseup = function() {
+                if (isSelecting) {
                     isSelecting = false;
-                    video.onmousemove = null;
                     document.getElementById('status').textContent = `Área selecionada: (${selection.x}, ${selection.y}) a (${selection.width}, ${selection.height}). Clique em 'Processar Vídeo com IA'.`;
-                };
+                }
             };
         }
 
         async function processVideo() {
-            if (!model && !selection.width) {
+            if (!model && selection.width === 0) {
                 alert("Por favor, selecione uma área manualmente ou aguarde o modelo de IA carregar.");
                 return;
             }
@@ -218,8 +271,12 @@
         async function detectWatermark() {
             const predictions = await model.detect(canvas);
             predictions.forEach(prediction => {
-                // Filtrar detecções que podem ser marcas d'água (ex: objetos retangulares)
-                if (prediction.class === 'person' || prediction.class === 'cell phone') return;
+                // Verificar se a detecção corresponde a marcas d'água comuns
+                const isCommonWatermark = commonWatermarks.some(watermark => {
+                    return watermark.keywords.some(keyword => prediction.class.toLowerCase().includes(keyword));
+                });
+
+                if (!isCommonWatermark && (prediction.class === 'person' || prediction.class === 'cell phone')) return;
 
                 // Aplicar blur na área detectada
                 applyBlur(prediction.bbox[0], prediction.bbox[1], prediction.bbox[2], prediction.bbox[3]);
